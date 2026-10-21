@@ -116,6 +116,7 @@ export default function ImportPage() {
             className="mt-2 block w-full text-sm"
             onChange={(e) => {
               const file = e.target.files?.[0];
+              e.target.value = "";
               if (file) void onFile(file);
             }}
           />

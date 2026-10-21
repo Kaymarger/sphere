@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -14,10 +15,14 @@ import { money } from "@/lib/format";
 import { isOpen, personName } from "@/lib/people";
 import type { Buyer, Deal, Listing } from "@/lib/types";
 
-export default function BusinessPage() {
+function BusinessInner() {
   const { db, today } = useOffice();
+  const params = useSearchParams();
   usePageTitle("Active business");
-  const [tab, setTab] = useState<"listings" | "buyers" | "deals">("listings");
+  const requested = params.get("tab");
+  const [tab, setTab] = useState<"listings" | "buyers" | "deals">(
+    requested === "buyers" || requested === "deals" || requested === "listings" ? requested : "listings",
+  );
   if (!db) return null;
   return (
     <div>
@@ -43,6 +48,14 @@ export default function BusinessPage() {
       {tab === "buyers" ? <Buyers /> : null}
       {tab === "deals" ? <Deals /> : null}
     </div>
+  );
+}
+
+export default function BusinessPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Opening active business…</p>}>
+      <BusinessInner />
+    </Suspense>
   );
 }
 
@@ -96,7 +109,7 @@ function Listings({ today }: { today: string }) {
           );
         })}
       </div>
-      <ListingDialog open={open} listing={editing} onClose={() => setOpen(false)} />
+      <ListingDialog key={open ? editing?.id || "new" : "closed"} open={open} listing={editing} onClose={() => setOpen(false)} />
     </div>
   );
 }
@@ -121,16 +134,10 @@ function ListingDialog({ open, listing, onClose }: { open: boolean; listing: Lis
       notes: "",
     },
   );
-  const sig = `${listing?.id ?? "new"}|${open}`;
-  const [seen, setSeen] = useState(sig);
-  if (sig !== seen) {
-    setSeen(sig);
-    if (listing) setDraft(listing);
-  }
   if (!db) return null;
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{listing ? "Edit listing" : "Add a listing"}</DialogTitle>
         </DialogHeader>
@@ -154,6 +161,18 @@ function ListingDialog({ open, listing, onClose }: { open: boolean; listing: Lis
             </Field>
             <Field label="Price">
               <Input value={draft.price || ""} onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) || 0 })} inputMode="numeric" />
+            </Field>
+            <Field label="Beds">
+              <Input value={draft.beds} onChange={(e) => setDraft({ ...draft, beds: Number(e.target.value) || 0 })} inputMode="numeric" />
+            </Field>
+            <Field label="Baths">
+              <Input value={draft.baths} onChange={(e) => setDraft({ ...draft, baths: Number(e.target.value) || 0 })} inputMode="decimal" />
+            </Field>
+            <Field label="Listed">
+              <Input type="date" value={draft.listDate} onChange={(e) => setDraft({ ...draft, listDate: e.target.value })} />
+            </Field>
+            <Field label="Expires">
+              <Input type="date" value={draft.expires} onChange={(e) => setDraft({ ...draft, expires: e.target.value })} />
             </Field>
             <Field label="Status">
               <Select value={draft.status} onValueChange={(status) => setDraft({ ...draft, status: status as Listing["status"] })}>
@@ -195,6 +214,7 @@ function ListingDialog({ open, listing, onClose }: { open: boolean; listing: Lis
 function Buyers() {
   const { db, act } = useOffice();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState("");
   const [contactId, setContactId] = useState("");
   const [areas, setAreas] = useState("");
   const [budget, setBudget] = useState("");
@@ -204,9 +224,22 @@ function Buyers() {
   const [preapproved, setPreapproved] = useState(false);
   const [notes, setNotes] = useState("");
   if (!db) return null;
+  function begin(buyer?: Buyer) {
+    setEditingId(buyer?.id ?? "");
+    setContactId(buyer?.contactId ?? "");
+    setAreas(buyer?.areas ?? "");
+    setBudget(buyer?.budget ?? "");
+    setBeds(buyer?.beds ?? "2 bedrooms");
+    setAgent(buyer?.agent || db?.settings.agents[0] || "");
+    setStatus(buyer?.status ?? "Looking");
+    setPreapproved(buyer?.preapproved ?? false);
+    setNotes(buyer?.notes ?? "");
+    setOpen(true);
+  }
+  const agentValue = agent || db.settings.agents[0] || "";
   return (
     <div>
-      <Button className="mb-3" onClick={() => setOpen(true)}>Add a buyer</Button>
+      <Button className="mb-3" onClick={() => begin()}>Add a buyer</Button>
       <div className="grid gap-3 lg:grid-cols-2">
         {db.buyers.filter(isOpen).map((b) => {
           const person = db.contacts.find((c) => c.id === b.contactId);
@@ -226,6 +259,7 @@ function Buyers() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Button size="sm" variant="outline" onClick={() => begin(b)}>Edit</Button>
                 <Button size="sm" variant="ghost" onClick={() => void act({ type: "deleteBuyers", ids: [b.id] })}>Remove</Button>
               </div>
             </article>
@@ -233,19 +267,22 @@ function Buyers() {
         })}
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader><DialogTitle>Add a buyer</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>{editingId ? "Edit buyer" : "Add a buyer"}</DialogTitle></DialogHeader>
           <form className="grid gap-3" onSubmit={async (e) => {
             e.preventDefault();
-            const res = await act({ type: "saveBuyer", buyer: { contactId, status, areas, budget, beds, agent, preapproved, notes } });
-            if (toastResult(res, "Buyer added")) setOpen(false);
+            const res = await act({
+              type: "saveBuyer",
+              buyer: { id: editingId || undefined, contactId, status, areas, budget, beds, agent: agentValue, preapproved, notes },
+            });
+            if (toastResult(res, editingId ? "Buyer updated" : "Buyer added")) setOpen(false);
           }}>
             <PersonPicker contacts={db.contacts} value={contactId} onChange={setContactId} label="Buyer" />
             <Field label="Areas"><Input value={areas} onChange={(e) => setAreas(e.target.value)} /></Field>
             <Field label="Budget"><Input value={budget} onChange={(e) => setBudget(e.target.value)} /></Field>
             <Field label="Beds"><Input value={beds} onChange={(e) => setBeds(e.target.value)} /></Field>
             <Field label="Agent">
-              <Select value={agent} onValueChange={setAgent}>
+              <Select value={agentValue} onValueChange={setAgent}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>{db.settings.agents.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
               </Select>
@@ -262,7 +299,7 @@ function Buyers() {
             </Field>
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={preapproved} onCheckedChange={(v) => setPreapproved(v === true)} /> Pre-approved</label>
             <Field label="Notes"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-card" /></Field>
-            <DialogFooter><Button type="submit">Save buyer</Button></DialogFooter>
+            <DialogFooter><Button type="submit">{editingId ? "Save changes" : "Save buyer"}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
@@ -273,6 +310,7 @@ function Buyers() {
 function Deals() {
   const { db, act, today } = useOffice();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("Vancouver");
   const [side, setSide] = useState<Deal["side"]>("Buyer");
@@ -284,9 +322,23 @@ function Deals() {
   const [notes, setNotes] = useState("");
   if (!db) return null;
   const rows = [...db.deals.filter(isOpen)].sort((a, b) => b.closeDate.localeCompare(a.closeDate));
+  function begin(deal?: Deal) {
+    setEditingId(deal?.id ?? "");
+    setAddress(deal?.address ?? "");
+    setCity(deal?.city ?? "Vancouver");
+    setSide(deal?.side ?? "Buyer");
+    setStatus(deal?.status ?? "Conditional");
+    setPrice(deal?.price ? String(deal.price) : "");
+    setCloseDate(deal?.closeDate || today);
+    setAgent(deal?.agent || db?.settings.agents[0] || "");
+    setContactId(deal?.contactIds[0] ?? "");
+    setNotes(deal?.notes ?? "");
+    setOpen(true);
+  }
+  const agentValue = agent || db.settings.agents[0] || "";
   return (
     <div>
-      <Button className="mb-3" onClick={() => setOpen(true)}>Add a deal</Button>
+      <Button className="mb-3" onClick={() => begin()}>Add a deal</Button>
       <ul className="space-y-2">
         {rows.map((d) => (
           <li key={d.id} className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
@@ -304,26 +356,41 @@ function Deals() {
                 </p>
                 {d.notes ? <p className="mt-1 text-sm">{d.notes}</p> : null}
               </div>
-              <Select value={d.status} onValueChange={(status) => void act({ type: "saveDeal", deal: { ...d, status: status as Deal["status"] } })}>
-                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["Conditional", "Firm", "Closed", "Fell through"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={d.status} onValueChange={(status) => void act({ type: "saveDeal", deal: { ...d, status: status as Deal["status"] } })}>
+                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["Conditional", "Firm", "Closed", "Fell through"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" variant="outline" onClick={() => begin(d)}>Edit</Button>
+                <Button size="sm" variant="ghost" onClick={() => void act({ type: "deleteDeals", ids: [d.id] })}>Remove</Button>
+              </div>
             </div>
           </li>
         ))}
       </ul>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader><DialogTitle>Add a deal</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>{editingId ? "Edit deal" : "Add a deal"}</DialogTitle></DialogHeader>
           <form className="grid gap-3" onSubmit={async (e) => {
             e.preventDefault();
             const res = await act({
               type: "saveDeal",
-              deal: { address, city, side, status, price: Number(price) || 0, closeDate, agent, contactIds: contactId ? [contactId] : [], notes },
+              deal: {
+                id: editingId || undefined,
+                address,
+                city,
+                side,
+                status,
+                price: Number(price) || 0,
+                closeDate,
+                agent: agentValue,
+                contactIds: contactId ? [contactId] : [],
+                notes,
+              },
             });
-            if (toastResult(res, "Deal saved")) setOpen(false);
+            if (toastResult(res, editingId ? "Deal updated" : "Deal saved")) setOpen(false);
           }}>
             <Field label="Address"><Input value={address} onChange={(e) => setAddress(e.target.value)} required /></Field>
             <Field label="City"><Input value={city} onChange={(e) => setCity(e.target.value)} /></Field>
@@ -344,14 +411,14 @@ function Deals() {
               <Field label="Close date"><Input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} /></Field>
             </div>
             <Field label="Agent">
-              <Select value={agent} onValueChange={setAgent}>
+              <Select value={agentValue} onValueChange={setAgent}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>{db.settings.agents.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
               </Select>
             </Field>
             <PersonPicker contacts={db.contacts} value={contactId} onChange={setContactId} />
             <Field label="Notes"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-card" /></Field>
-            <DialogFooter><Button type="submit">Save deal</Button></DialogFooter>
+            <DialogFooter><Button type="submit">{editingId ? "Save changes" : "Save deal"}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

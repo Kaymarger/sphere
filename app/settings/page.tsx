@@ -3,8 +3,19 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Field, PageHeader, toastResult, usePageTitle, useSyncedDraft } from "@/components/bits";
 import { useOffice } from "@/components/office-provider";
+
+const ZONES = [
+  ["America/Vancouver", "Pacific — Vancouver"],
+  ["America/Edmonton", "Mountain — Edmonton"],
+  ["America/Winnipeg", "Central — Winnipeg"],
+  ["America/Toronto", "Eastern — Toronto"],
+  ["America/Halifax", "Atlantic — Halifax"],
+  ["America/St_Johns", "Newfoundland"],
+] as const;
 
 export default function SettingsPage() {
   const { db, act } = useOffice();
@@ -20,6 +31,10 @@ export default function SettingsPage() {
           phone: db.settings.phone,
           email: db.settings.email,
           timezone: db.settings.timezone,
+          officeName: db.settings.officeName,
+          brokerage: db.settings.brokerage,
+          city: db.settings.city,
+          showWelcome: db.settings.showWelcome,
         }
       : null,
   );
@@ -31,7 +46,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Settings"
         title="Your desk"
-        lede="This is Kayla’s sample login. Time zone stays on Pacific so reminders match the Vancouver office."
+        lede="The name on letters, the agents, and the groups all live in this browser. Time zone controls which day counts as today."
       />
       <article className="rounded-2xl bg-card p-5 ring-1 ring-foreground/10">
         <h2 className="font-heading text-2xl text-foreground">You</h2>
@@ -49,9 +64,33 @@ export default function SettingsPage() {
             <Input value={draft.email} onChange={(e) => synced.setDraft({ ...draft, email: e.target.value })} />
           </Field>
           <Field label="Time zone">
-            <Input value={draft.timezone} onChange={(e) => synced.setDraft({ ...draft, timezone: e.target.value })} />
+            <Select value={draft.timezone} onValueChange={(timezone) => synced.setDraft({ ...draft, timezone })}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(ZONES.some(([zone]) => zone === draft.timezone) ? ZONES : [[draft.timezone, draft.timezone] as const, ...ZONES]).map(([zone, label]) => (
+                  <SelectItem key={zone} value={zone}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Office name">
+            <Input value={draft.officeName} onChange={(e) => synced.setDraft({ ...draft, officeName: e.target.value })} />
+          </Field>
+          <Field label="Brokerage">
+            <Input value={draft.brokerage} onChange={(e) => synced.setDraft({ ...draft, brokerage: e.target.value })} />
+          </Field>
+          <Field label="City">
+            <Input value={draft.city} onChange={(e) => synced.setDraft({ ...draft, city: e.target.value })} />
           </Field>
         </div>
+        <label className="mt-4 flex items-center gap-2 text-sm">
+          <Checkbox checked={draft.showWelcome} onCheckedChange={(v) => synced.setDraft({ ...draft, showWelcome: v === true })} />
+          Show the welcome note on Home
+        </label>
         <Button
           className="mt-4"
           disabled={!synced.dirty}
@@ -62,9 +101,6 @@ export default function SettingsPage() {
         >
           Save
         </Button>
-        <p className="mt-4 text-sm text-muted-foreground">
-          {db.settings.officeName} · {db.settings.brokerage} · {db.settings.city}
-        </p>
       </article>
       <article className="rounded-2xl bg-card p-5 ring-1 ring-foreground/10">
         <h2 className="font-heading text-2xl text-foreground">Agents</h2>

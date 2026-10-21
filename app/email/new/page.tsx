@@ -27,7 +27,9 @@ function NewCampaignInner() {
   const [value, setValue] = useState(db?.settings.groups.includes("Holiday card") ? "Holiday card" : db?.settings.groups[0] || "");
   const [ready, setReady] = useState(Boolean(existing));
   if (!db) return null;
-  const template = db.emailTemplates.find((t) => t.id === templateId);
+  const templates = db.emailTemplates.filter(isOpen);
+  const template = templates.find((t) => t.id === templateId) ?? templates[0];
+  const activeTemplateId = template?.id ?? "";
 
   const pool = db.contacts.filter((c) => isOpen(c));
   const inGroup = pool.filter((c) => {
@@ -51,7 +53,7 @@ function NewCampaignInner() {
       campaign: {
         id: existing?.id,
         name: name || subject || template?.name || "Campaign",
-        templateId,
+        templateId: activeTemplateId,
         subject: subject || template?.subject || "",
         body: body || template?.body || "",
         audienceLabel,
@@ -78,29 +80,39 @@ function NewCampaignInner() {
       <div className="grid gap-4">
         <article className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
           <Field label="Start from a template">
-            <Select
-              value={templateId}
-              onValueChange={(id) => {
-                setTemplateId(id);
-                const next = db.emailTemplates.find((t) => t.id === id);
-                if (next && !ready) {
-                  setSubject(next.subject);
-                  setBody(next.body);
-                  setName(next.name);
-                }
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {db.emailTemplates.filter(isOpen).map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {db.emailTemplates.filter(isOpen).length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No templates yet.{" "}
+                <Link href="/email" className="underline underline-offset-2">
+                  Write one
+                </Link>{" "}
+                or type the message below.
+              </p>
+            ) : (
+              <Select
+                value={activeTemplateId}
+                onValueChange={(id) => {
+                  setTemplateId(id);
+                  const next = db.emailTemplates.find((t) => t.id === id);
+                  if (next && !ready) {
+                    setSubject(next.subject);
+                    setBody(next.body);
+                    setName(next.name);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {db.emailTemplates.filter(isOpen).map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </Field>
           <div className="mt-3 grid gap-3">
             <Field label="Campaign name">

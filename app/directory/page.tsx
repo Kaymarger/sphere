@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, Field, PageHeader, toastResult, usePageTitle } from "@/components/bits";
 import { useOffice } from "@/components/office-provider";
 import { isOpen } from "@/lib/people";
+import type { Vendor } from "@/lib/types";
 
 const CATS = ["All", "Mortgage", "Home inspection", "Notary and legal", "Staging", "Photography", "Movers", "Cleaning", "Trades", "Insurance", "Appraisal"];
 
@@ -17,6 +18,7 @@ export default function DirectoryPage() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Vendor | null>(null);
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [category, setCategory] = useState("Trades");
@@ -34,7 +36,21 @@ export default function DirectoryPage() {
   return (
     <div>
       <PageHeader eyebrow="Vendors" title="People you trust with a client" lede="Inspectors, notaries, stagers, and the rest. Phone numbers here are sample numbers.">
-        <Button onClick={() => setOpen(true)}>Add a vendor</Button>
+        <Button
+          onClick={() => {
+            setEditing(null);
+            setName("");
+            setCompany("");
+            setCategory("Trades");
+            setPhone("");
+            setEmail("");
+            setCity("Vancouver");
+            setNotes("");
+            setOpen(true);
+          }}
+        >
+          Add a vendor
+        </Button>
       </PageHeader>
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search vendors" aria-label="Search vendors" className="mb-3 max-w-md" />
       <div className="mb-4 flex gap-2 overflow-x-auto">
@@ -57,19 +73,44 @@ export default function DirectoryPage() {
               <a className="text-foreground underline-offset-2 hover:underline" href={`mailto:${v.email}`}>{v.email}</a>
             </p>
             <p className="mt-2 text-sm text-muted-foreground">{v.notes}</p>
-            <button type="button" className="mt-2 text-sm text-brand" onClick={() => void act({ type: "deleteVendors", ids: [v.id] })}>
-              Move to recycle bin
-            </button>
+            <div className="mt-3 flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setEditing(v);
+                  setName(v.name);
+                  setCompany(v.company);
+                  setCategory(v.category);
+                  setPhone(v.phone);
+                  setEmail(v.email);
+                  setCity(v.city);
+                  setNotes(v.notes);
+                  setOpen(true);
+                }}
+              >
+                Edit
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => void act({ type: "deleteVendors", ids: [v.id] })}>
+                Move to recycle bin
+              </Button>
+            </div>
           </article>
         ))}
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>Add a vendor</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? "Edit vendor" : "Add a vendor"}</DialogTitle></DialogHeader>
           <form className="grid gap-3" onSubmit={async (e) => {
             e.preventDefault();
-            const res = await act({ type: "saveVendor", vendor: { name, company, category, phone, email, city, notes, tags: [category] } });
-            if (toastResult(res, "Vendor added")) setOpen(false);
+            const res = await act({
+              type: "saveVendor",
+              vendor: { id: editing?.id, name, company, category, phone, email, city, notes, tags: [category] },
+            });
+            if (toastResult(res, editing ? "Vendor updated" : "Vendor added")) {
+              setOpen(false);
+              setEditing(null);
+            }
           }}>
             <Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>
             <Field label="Company"><Input value={company} onChange={(e) => setCompany(e.target.value)} required /></Field>
@@ -78,7 +119,7 @@ export default function DirectoryPage() {
             <Field label="Email"><Input value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
             <Field label="City"><Input value={city} onChange={(e) => setCity(e.target.value)} /></Field>
             <Field label="Notes"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-card" /></Field>
-            <DialogFooter><Button type="submit">Save vendor</Button></DialogFooter>
+            <DialogFooter><Button type="submit">{editing ? "Save changes" : "Save vendor"}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

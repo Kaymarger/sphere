@@ -1,8 +1,27 @@
-import type { Contact, Database } from "./types";
+import type { BinBucket, Contact, Database } from "./types";
 import { digits } from "./format";
 
 export function isOpen<T extends { deletedAt?: string | null }>(row: T): boolean {
   return !row.deletedAt;
+}
+
+const BIN_KEYS: BinBucket[] = [
+  "contacts",
+  "tasks",
+  "events",
+  "emailTemplates",
+  "letterTemplates",
+  "campaigns",
+  "plans",
+  "vendors",
+  "listings",
+  "buyers",
+  "deals",
+  "enrollments",
+];
+
+export function binCount(db: Database): number {
+  return BIN_KEYS.reduce((total, key) => total + db[key].filter((row) => row.deletedAt).length, 0);
 }
 
 export function people(db: Database): Contact[] {

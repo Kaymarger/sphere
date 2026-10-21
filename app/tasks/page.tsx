@@ -20,6 +20,7 @@ function TasksInner() {
   usePageTitle("Tasks");
   const [filter, setFilter] = useState<"open" | "today" | "overdue" | "done">("open");
   const [open, setOpen] = useState(params.get("for") ? true : false);
+  const [editing, setEditing] = useState<Task | null>(null);
   const [title, setTitle] = useState("");
   const [due, setDue] = useState(today);
   const [kind, setKind] = useState<Task["kind"]>("To-do");
@@ -44,7 +45,19 @@ function TasksInner() {
   return (
     <div>
       <PageHeader eyebrow="Tasks" title="What is on the list" lede="Calls, paperwork, and the small jobs that keep a file moving.">
-        <Button onClick={() => setOpen(true)}>Add a task</Button>
+        <Button
+          onClick={() => {
+            setEditing(null);
+            setTitle("");
+            setDue(today);
+            setKind("To-do");
+            setNotes("");
+            setContactId("");
+            setOpen(true);
+          }}
+        >
+          Add a task
+        </Button>
       </PageHeader>
       <div className="mb-4 flex gap-2 overflow-x-auto">
         {(
@@ -93,9 +106,26 @@ function TasksInner() {
                   ) : null}
                 </p>
                 {task.notes ? <p className="mt-1 text-sm">{task.notes}</p> : null}
-                <button type="button" className="mt-2 text-sm text-brand" onClick={() => void act({ type: "deleteTasks", ids: [task.id] })}>
-                  Move to recycle bin
-                </button>
+                <div className="mt-2 flex gap-3 text-sm">
+                  <button
+                    type="button"
+                    className="text-brand"
+                    onClick={() => {
+                      setEditing(task);
+                      setTitle(task.title);
+                      setDue(task.due);
+                      setKind(task.kind);
+                      setNotes(task.notes);
+                      setContactId(task.contactId);
+                      setOpen(true);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button type="button" className="text-brand" onClick={() => void act({ type: "deleteTasks", ids: [task.id] })}>
+                    Move to recycle bin
+                  </button>
+                </div>
               </div>
             </li>
           ))}
@@ -105,15 +135,18 @@ function TasksInner() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add a task</DialogTitle>
+            <DialogTitle>{editing ? "Edit task" : "Add a task"}</DialogTitle>
           </DialogHeader>
           <form
             className="grid gap-3"
             onSubmit={async (e) => {
               e.preventDefault();
-              const res = await act({ type: "createTask", title, due, kind, notes, contactId });
-              if (toastResult(res, "Task added")) {
+              const res = editing
+                ? await act({ type: "updateTask", id: editing.id, patch: { title, due, kind, notes, contactId } })
+                : await act({ type: "createTask", title, due, kind, notes, contactId });
+              if (toastResult(res, editing ? "Task updated" : "Task added")) {
                 setOpen(false);
+                setEditing(null);
                 setTitle("");
                 setNotes("");
               }
@@ -146,7 +179,7 @@ function TasksInner() {
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-card" />
             </Field>
             <DialogFooter>
-              <Button type="submit">Save task</Button>
+              <Button type="submit">{editing ? "Save changes" : "Save task"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

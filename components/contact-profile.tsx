@@ -19,10 +19,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, Field, Initials, toastResult, usePageTitle, useSyncedDraft } from "@/components/bits";
 import { useOffice } from "@/components/office-provider";
+import { downloadText } from "@/lib/csv";
 import { longDate, shortDate } from "@/lib/dates";
 import { money } from "@/lib/format";
 import { fullAddress, personName, suggestSalutations } from "@/lib/people";
-import type { Contact, ContactPatch } from "@/lib/types";
+import type { Contact, ContactPatch, DocumentRecord } from "@/lib/types";
 
 const TABS = [
   ["overview", "Overview"],
@@ -652,6 +653,8 @@ function PersonalCard({ contact, onSave }: { contact: Contact; onSave: (p: Conta
 function Notes({ contact }: { contact: Contact }) {
   const { act } = useOffice();
   const [text, setText] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   return (
     <div className="space-y-3">
       <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="What should the next person know?" className="min-h-28 bg-card" />
@@ -663,12 +666,50 @@ function Notes({ contact }: { contact: Contact }) {
       >
         Save note
       </Button>
+      {contact.notes.length === 0 ? <EmptyState title="No notes yet" body="A note stays on this person and shows up in their history." /> : null}
       {contact.notes.map((n) => (
         <article key={n.id} className="rounded-xl bg-card p-4 ring-1 ring-foreground/10">
           <p className="text-xs text-muted-foreground">
             {shortDate(n.at.slice(0, 10))} · {n.author}
           </p>
-          <p className="mt-1 whitespace-pre-wrap">{n.text}</p>
+          {editing === n.id ? (
+            <div className="mt-2 grid gap-2">
+              <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="min-h-24 bg-card" aria-label="Edit note" />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    const res = await act({ type: "updateNote", contactId: contact.id, noteId: n.id, text: draft });
+                    if (toastResult(res, "Note updated")) setEditing(null);
+                  }}
+                >
+                  Save
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setEditing(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-1 whitespace-pre-wrap">{n.text}</p>
+          )}
+          {editing === n.id ? null : (
+            <div className="mt-2 flex gap-3 text-sm">
+              <button
+                type="button"
+                className="text-brand"
+                onClick={() => {
+                  setEditing(n.id);
+                  setDraft(n.text);
+                }}
+              >
+                Edit
+              </button>
+              <button type="button" className="text-brand" onClick={() => void act({ type: "deleteNote", contactId: contact.id, noteId: n.id })}>
+                Remove
+              </button>
+            </div>
+          )}
         </article>
       ))}
     </div>
@@ -682,6 +723,15 @@ function Referrals({ contact }: { contact: Contact }) {
   const [kind, setKind] = useState("Buyer");
   const [status, setStatus] = useState<Contact["referrals"][number]["status"]>("In progress");
   const [notes, setNotes] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  function clearForm() {
+    setName("");
+    setNotes("");
+    setEditing(null);
+    setSide("They referred someone");
+    setKind("Buyer");
+    setStatus("In progress");
+  }
   return (
     <div className="space-y-4">
       <article className="grid gap-3 rounded-2xl bg-card p-4 ring-1 ring-foreground/10 sm:grid-cols-2">
@@ -721,17 +771,23 @@ function Referrals({ contact }: { contact: Contact }) {
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-card" />
           </Field>
         </div>
-        <Button
-          onClick={async () => {
-            const res = await act({ type: "addReferral", contactId: contact.id, name, side, kind, status, notes });
-            if (toastResult(res, "Referral saved")) {
-              setName("");
-              setNotes("");
-            }
-          }}
-        >
-          Add referral
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={async () => {
+              const res = editing
+                ? await act({ type: "updateReferral", contactId: contact.id, referralId: editing, name, side, kind, status, notes })
+                : await act({ type: "addReferral", contactId: contact.id, name, side, kind, status, notes });
+              if (toastResult(res, editing ? "Referral updated" : "Referral saved")) clearForm();
+            }}
+          >
+            {editing ? "Save referral" : "Add referral"}
+          </Button>
+          {editing ? (
+            <Button type="button" variant="outline" onClick={clearForm}>
+              Cancel
+            </Button>
+          ) : null}
+        </div>
       </article>
       {contact.referrals.length === 0 ? <EmptyState title="No referrals yet" /> : null}
       {contact.referrals.map((r) => (
@@ -744,9 +800,25 @@ function Referrals({ contact }: { contact: Contact }) {
               </p>
               {r.notes ? <p className="mt-1 text-sm">{r.notes}</p> : null}
             </div>
-            <button type="button" className="text-sm text-brand" onClick={() => void act({ type: "deleteReferral", contactId: contact.id, referralId: r.id })}>
-              Remove
-            </button>
+            <div className="flex gap-3 text-sm">
+              <button
+                type="button"
+                className="text-brand"
+                onClick={() => {
+                  setEditing(r.id);
+                  setName(r.name);
+                  setSide(r.side);
+                  setKind(r.kind);
+                  setStatus(r.status);
+                  setNotes(r.notes);
+                }}
+              >
+                Edit
+              </button>
+              <button type="button" className="text-brand" onClick={() => void act({ type: "deleteReferral", contactId: contact.id, referralId: r.id })}>
+                Remove
+              </button>
+            </div>
           </div>
         </article>
       ))}
@@ -754,16 +826,41 @@ function Referrals({ contact }: { contact: Contact }) {
   );
 }
 
+function readFile(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("read"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function downloadDocument(doc: DocumentRecord) {
+  if (doc.dataUrl) {
+    const a = document.createElement("a");
+    a.href = doc.dataUrl;
+    a.download = doc.name || "file";
+    a.click();
+    return;
+  }
+  const filename = doc.name.toLowerCase().endsWith(".txt") ? doc.name : `${doc.name || "note"}.txt`;
+  downloadText(filename, doc.note || doc.name, "text/plain;charset=utf-8");
+}
+
 function Files({ contact }: { contact: Contact }) {
   const { act } = useOffice();
   const [name, setName] = useState("");
   const [kind, setKind] = useState("Contract");
   const [note, setNote] = useState("");
+  const [dataUrl, setDataUrl] = useState("");
+  const [mime, setMime] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const current = contact.documents.find((d) => d.id === open);
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">These are file records, not uploads. The name and note stay with the person.</p>
+      <p className="text-sm text-muted-foreground">
+        Attach a small file, or just keep the name and a note. Files stay in this browser with the rest of the book. Keep attachments under about 350 KB.
+      </p>
       <article className="grid gap-3 rounded-2xl bg-card p-4 ring-1 ring-foreground/10 sm:grid-cols-2">
         <Field label="File name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Strata minutes.pdf" />
@@ -772,27 +869,56 @@ function Files({ contact }: { contact: Contact }) {
           <Input value={kind} onChange={(e) => setKind(e.target.value)} />
         </Field>
         <div className="sm:col-span-2">
+          <Field label="Attach a file">
+            <Input
+              type="file"
+              aria-label="Attach a file"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                if (file.size > 350_000) {
+                  toast.error("That file is too big for this browser’s book. Keep it under 350 KB.");
+                  return;
+                }
+                try {
+                  setDataUrl(await readFile(file));
+                  setMime(file.type || "application/octet-stream");
+                  if (!name.trim()) setName(file.name);
+                } catch {
+                  toast.error("That file didn’t open. Try another one.");
+                }
+              }}
+            />
+          </Field>
+          {dataUrl ? <p className="text-xs text-muted-foreground">A file is attached and will be saved with this person.</p> : null}
+        </div>
+        <div className="sm:col-span-2">
           <Field label="Note">
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} className="bg-card" />
           </Field>
         </div>
         <Button
           onClick={async () => {
-            const res = await act({ type: "addDocument", contactId: contact.id, name, kind, note });
-            if (toastResult(res, "File noted")) {
+            const res = await act({ type: "addDocument", contactId: contact.id, name, kind, note, dataUrl: dataUrl || undefined, mime: mime || undefined });
+            if (toastResult(res, dataUrl ? "File saved" : "File noted")) {
               setName("");
               setNote("");
+              setDataUrl("");
+              setMime("");
             }
           }}
         >
-          Add file record
+          Save file
         </Button>
       </article>
+      {contact.documents.length === 0 ? <EmptyState title="No files yet" /> : null}
       {contact.documents.map((d) => (
         <button key={d.id} type="button" className="block w-full rounded-xl bg-card p-4 text-left ring-1 ring-foreground/10" onClick={() => setOpen(d.id)}>
           <p className="font-medium text-foreground">{d.name}</p>
           <p className="text-sm text-muted-foreground">
             {d.kind} · {shortDate(d.at)}
+            {d.dataUrl ? " · file attached" : ""}
           </p>
         </button>
       ))}
@@ -800,18 +926,21 @@ function Files({ contact }: { contact: Contact }) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{current?.name}</DialogTitle>
-            <DialogDescription>{current?.note}</DialogDescription>
+            <DialogDescription>{current?.note || (current?.dataUrl ? "Open or download the attached file." : "No note on this file.")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
+            <Button variant="outline" onClick={() => current && downloadDocument(current)}>
+              Download
+            </Button>
             <Button
-              variant="outline"
+              variant="destructive"
               onClick={async () => {
                 if (!current) return;
-                await act({ type: "deleteDocument", contactId: contact.id, documentId: current.id });
-                setOpen(null);
+                const res = await act({ type: "deleteDocument", contactId: contact.id, documentId: current.id });
+                if (toastResult(res, "File removed")) setOpen(null);
               }}
             >
-              Remove record
+              Remove
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -828,6 +957,15 @@ function Properties({ contact }: { contact: Contact }) {
   const [date, setDate] = useState("");
   const [price, setPrice] = useState("");
   const [mls, setMls] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  function clearForm() {
+    setAddress("");
+    setPrice("");
+    setMls("");
+    setDate("");
+    setEditing(null);
+    setRole("Bought");
+  }
   return (
     <div className="space-y-4">
       <article className="grid gap-3 rounded-2xl bg-card p-4 ring-1 ring-foreground/10 sm:grid-cols-2">
@@ -860,23 +998,32 @@ function Properties({ contact }: { contact: Contact }) {
         <Field label="MLS">
           <Input value={mls} onChange={(e) => setMls(e.target.value)} />
         </Field>
-        <Button
-          onClick={async () => {
-            const res = await act({
-              type: "addProperty",
-              contactId: contact.id,
-              address,
-              city,
-              role,
-              date,
-              price: Number(price.replace(/[^0-9.]/g, "")) || 0,
-              mls,
-            });
-            if (toastResult(res, "Property saved")) setAddress("");
-          }}
-        >
-          Add property
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={async () => {
+              const payload = {
+                contactId: contact.id,
+                address,
+                city,
+                role,
+                date,
+                price: Number(price.replace(/[^0-9.]/g, "")) || 0,
+                mls,
+              };
+              const res = editing
+                ? await act({ type: "updateProperty", propertyId: editing, ...payload })
+                : await act({ type: "addProperty", ...payload });
+              if (toastResult(res, editing ? "Property updated" : "Property saved")) clearForm();
+            }}
+          >
+            {editing ? "Save property" : "Add property"}
+          </Button>
+          {editing ? (
+            <Button type="button" variant="outline" onClick={clearForm}>
+              Cancel
+            </Button>
+          ) : null}
+        </div>
       </article>
       <div className="grid gap-3 md:grid-cols-2">
         {contact.properties.map((p) => (
@@ -887,9 +1034,26 @@ function Properties({ contact }: { contact: Contact }) {
               {p.city} · {p.date ? longDate(p.date) : "No date"} · {money(p.price)}
               {p.mls ? ` · ${p.mls}` : ""}
             </p>
-            <button type="button" className="mt-2 text-sm text-brand" onClick={() => void act({ type: "deleteProperty", contactId: contact.id, propertyId: p.id })}>
-              Remove
-            </button>
+            <div className="mt-2 flex gap-3 text-sm">
+              <button
+                type="button"
+                className="text-brand"
+                onClick={() => {
+                  setEditing(p.id);
+                  setAddress(p.address);
+                  setCity(p.city);
+                  setRole(p.role);
+                  setDate(p.date);
+                  setPrice(p.price ? String(p.price) : "");
+                  setMls(p.mls);
+                }}
+              >
+                Edit
+              </button>
+              <button type="button" className="text-brand" onClick={() => void act({ type: "deleteProperty", contactId: contact.id, propertyId: p.id })}>
+                Remove
+              </button>
+            </div>
           </article>
         ))}
       </div>

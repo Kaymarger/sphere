@@ -18,6 +18,7 @@ export default function EmailPage() {
   const [tab, setTab] = useState<"templates" | "campaigns">("templates");
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<string | "new" | null>(null);
+  const [viewing, setViewing] = useState<string | null>(null);
   if (!db) return null;
   const templates = db.emailTemplates.filter(isOpen).filter((t) => `${t.name} ${t.category} ${t.description}`.toLowerCase().includes(q.toLowerCase()));
   const categories = [...new Set(templates.map((t) => t.category))];
@@ -83,6 +84,9 @@ export default function EmailPage() {
                   <p className="mt-1 text-sm">{c.subject}</p>
                 </div>
                 <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setViewing(c.id)}>
+                    View
+                  </Button>
                   {c.status === "Draft" ? (
                     <Button asChild size="sm" variant="outline">
                       <Link href={`/email/new?draft=${c.id}`}>Continue</Link>
@@ -112,7 +116,35 @@ export default function EmailPage() {
           });
           if (toastResult(res, "Template saved")) setEditing(null);
         }}
+        onDelete={
+          current
+            ? async () => {
+                const res = await act({ type: "deleteEmailTemplates", ids: [current.id] });
+                if (toastResult(res, "Template moved to the recycle bin")) setEditing(null);
+              }
+            : undefined
+        }
       />
+      <Dialog open={!!viewing} onOpenChange={(v) => !v && setViewing(null)}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{db.campaigns.find((c) => c.id === viewing)?.name ?? "Campaign"}</DialogTitle>
+          </DialogHeader>
+          {(() => {
+            const campaign = db.campaigns.find((c) => c.id === viewing);
+            if (!campaign) return null;
+            return (
+              <div className="grid gap-2 text-sm">
+                <p className="text-muted-foreground">
+                  {campaign.status} · {campaign.audienceLabel} · {campaign.recipientIds.length} people
+                </p>
+                <p className="font-medium">{campaign.subject}</p>
+                <pre className="font-sans whitespace-pre-wrap">{campaign.body}</pre>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -130,11 +162,13 @@ function TemplateDialog({
   initial,
   onClose,
   onSave,
+  onDelete,
 }: {
   open: boolean;
   initial: { id: string; name: string; category: string; description: string; subject: string; body: string; createdBy: string };
   onClose: () => void;
   onSave: (template: { id: string; name: string; category: string; description: string; subject: string; body: string; createdBy: string }) => void;
+  onDelete?: () => void;
 }) {
   const [draft, setDraft] = useState(initial);
   const signature = `${initial.id}|${open}`;
@@ -145,7 +179,7 @@ function TemplateDialog({
   }
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{draft.id ? "Edit template" : "New template"}</DialogTitle>
         </DialogHeader>
@@ -179,6 +213,11 @@ function TemplateDialog({
           </div>
         </div>
         <DialogFooter>
+          {onDelete ? (
+            <Button variant="ghost" onClick={onDelete}>
+              Move to recycle bin
+            </Button>
+          ) : null}
           <Button onClick={() => onSave(draft)}>Save template</Button>
         </DialogFooter>
       </DialogContent>

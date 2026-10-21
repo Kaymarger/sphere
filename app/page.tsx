@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Initials, usePageTitle, PersonLink } from "@/components/bits";
 import { useOffice } from "@/components/office-provider";
 import { addDays, fullDate, greetingForHour, shortDate, whenLabel } from "@/lib/dates";
@@ -134,18 +135,38 @@ export default function HomePage() {
             </Link>
           </div>
           <ul className="divide-y overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10">
-            {openTasks.slice(0, 5).map((task) => (
-              <li key={task.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div>
-                  <p className="font-medium">{task.title}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {task.kind}
-                    {task.contactId ? ` · ${personName(people.find((c) => c.id === task.contactId) || { firstName: "Someone", lastName: "" })}` : ""}
-                  </p>
-                </div>
-                <p className={`text-sm ${task.due < today ? "text-brand" : "text-muted-foreground"}`}>{whenLabel(task.due, today)}</p>
-              </li>
-            ))}
+            {openTasks.slice(0, 5).map((task) => {
+              const person = people.find((c) => c.id === task.contactId);
+              return (
+                <li key={task.id} className="flex items-center gap-3 px-4 py-3">
+                  <Checkbox
+                    checked={false}
+                    onCheckedChange={(v) => {
+                      if (v === true) void act({ type: "updateTask", id: task.id, patch: { done: true } });
+                    }}
+                    aria-label={`Mark ${task.title} done`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">
+                      <Link href="/tasks" className="hover:underline">
+                        {task.title}
+                      </Link>
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {task.kind}
+                      {person ? (
+                        <>
+                          {" · "}
+                          <PersonLink id={person.id} name={personName(person)} />
+                        </>
+                      ) : null}
+                    </p>
+                  </div>
+                  <p className={`text-sm ${task.due < today ? "text-brand" : "text-muted-foreground"}`}>{whenLabel(task.due, today)}</p>
+                </li>
+              );
+            })}
+            {openTasks.length === 0 ? <li className="px-4 py-5 text-sm text-muted-foreground">No open tasks.</li> : null}
           </ul>
         </section>
 
@@ -179,11 +200,13 @@ export default function HomePage() {
                 <li className="text-sm text-muted-foreground">No firm or conditional deals in the next month and a half.</li>
               ) : (
                 closing.map((deal) => (
-                  <li key={deal.id} className="rounded-xl bg-card p-3 ring-1 ring-foreground/10">
-                    <p className="font-medium text-foreground">{deal.address}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {deal.status} · {deal.side} · {money(deal.price)} · {shortDate(deal.closeDate)}
-                    </p>
+                  <li key={deal.id}>
+                    <Link href="/business?tab=deals" className="block rounded-xl bg-card p-3 ring-1 ring-foreground/10 transition hover:-translate-y-0.5">
+                      <p className="font-medium text-foreground">{deal.address}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {deal.status} · {deal.side} · {money(deal.price)} · {shortDate(deal.closeDate)}
+                      </p>
+                    </Link>
                   </li>
                 ))
               )}

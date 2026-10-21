@@ -20,7 +20,9 @@ export default function PlanDetailPage() {
   const plan = db?.plans.find((p) => p.id === params.id && isOpen(p));
   usePageTitle(plan?.name ?? "Plan");
   const [contactId, setContactId] = useState("");
-  const synced = useSyncedDraft(plan ? { name: plan.name, description: plan.description, steps: plan.steps } : null);
+  const synced = useSyncedDraft(
+    plan ? { name: plan.name, description: plan.description, category: plan.category, method: plan.method, steps: plan.steps } : null,
+  );
   if (!db) return null;
   if (!plan || !synced.draft) {
     return (
@@ -80,7 +82,14 @@ export default function PlanDetailPage() {
             onClick={async () => {
               const res = await act({
                 type: "savePlan",
-                plan: { ...plan, name: draft.name, description: draft.description, steps: draft.steps },
+                plan: {
+                  ...plan,
+                  name: draft.name,
+                  description: draft.description,
+                  category: draft.category,
+                  method: draft.method,
+                  steps: draft.steps,
+                },
               });
               toastResult(res, "Plan saved");
             }}
@@ -91,10 +100,40 @@ export default function PlanDetailPage() {
         <Field label="Name">
           <Input value={draft.name} onChange={(e) => synced.setDraft({ ...draft, name: e.target.value })} />
         </Field>
-        <div className="mt-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Description">
             <Textarea value={draft.description} onChange={(e) => synced.setDraft({ ...draft, description: e.target.value })} className="bg-card" />
           </Field>
+          <div className="grid gap-3">
+            <Field label="Category">
+              <Select value={draft.category} onValueChange={(category) => synced.setDraft({ ...draft, category: category as typeof draft.category })}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Marketing", "Listing", "Closing"].map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Mostly">
+              <Select value={draft.method} onValueChange={(method) => synced.setDraft({ ...draft, method: method as typeof draft.method })}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Email", "Letter", "Mixed"].map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
         </div>
         <ol className="mt-4 space-y-3">
           {draft.steps.map((step, index) => (
@@ -187,24 +226,31 @@ export default function PlanDetailPage() {
                     {step ? ` · ${step.channel}: ${step.title}` : ""} · {whenLabel(e.nextDue, today)}
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {e.status === "Running" ? (
                     <Button size="sm" variant="outline" onClick={() => void act({ type: "advanceEnrollment", id: e.id })}>
                       This step is done
                     </Button>
                   ) : null}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      void act({
-                        type: "setEnrollmentStatus",
-                        id: e.id,
-                        status: e.status === "Paused" ? "Running" : "Paused",
-                      })
-                    }
-                  >
-                    {e.status === "Paused" ? "Resume" : "Pause"}
+                  {e.status === "Finished" ? (
+                    <span className="self-center text-sm text-muted-foreground">Finished</span>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        void act({
+                          type: "setEnrollmentStatus",
+                          id: e.id,
+                          status: e.status === "Paused" ? "Running" : "Paused",
+                        })
+                      }
+                    >
+                      {e.status === "Paused" ? "Resume" : "Pause"}
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => void act({ type: "deleteEnrollments", ids: [e.id] })}>
+                    Remove
                   </Button>
                 </div>
               </li>

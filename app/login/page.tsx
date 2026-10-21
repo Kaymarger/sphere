@@ -38,8 +38,8 @@ function LoginForm() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-background px-4">
-      <form onSubmit={onSubmit} className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-sm">
+    <main className="grid min-h-screen place-items-center px-4 py-10">
+      <form onSubmit={onSubmit} className="w-full max-w-sm rounded-2xl bg-card p-6 shadow-lg ring-1 ring-foreground/10">
         <div className="flex items-center gap-2">
           <span className="grid size-8 place-items-center rounded-lg bg-brand text-white">
             <svg viewBox="0 0 32 32" className="size-4" aria-hidden>

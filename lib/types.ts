@@ -45,6 +45,9 @@ export interface DocumentRecord {
   kind: string;
   at: string;
   note: string;
+  /** Small file kept in this browser, as a data URL. Omitted when only the name was recorded. */
+  dataUrl?: string;
+  mime?: string;
 }
 
 export interface PropertyRecord {
@@ -368,4 +371,5 @@ export type BinBucket =
   | "vendors"
   | "listings"
   | "buyers"
-  | "deals";
+  | "deals"
+  | "enrollments";

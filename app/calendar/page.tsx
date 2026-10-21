@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +20,7 @@ export default function CalendarPage() {
   const [cursor, setCursor] = useState(today.slice(0, 7));
   const [selected, setSelected] = useState(today);
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState("");
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(today);
   const [time, setTime] = useState("10:00");
@@ -74,7 +76,13 @@ export default function CalendarPage() {
         </Button>
         <Button
           onClick={() => {
+            setEditingId("");
+            setTitle("");
             setDate(selected);
+            setTime("10:00");
+            setKind("Appointment");
+            setNotes("");
+            setContactId("");
             setOpen(true);
           }}
         >
@@ -116,24 +124,58 @@ export default function CalendarPage() {
         <aside className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10">
           <h2 className="font-heading text-xl text-foreground">{selected === today ? "Today" : selected}</h2>
           <ul className="mt-3 space-y-3 text-sm">
-            {dayEvents.map((e) => (
-              <li key={e.id}>
-                <p className="font-medium">{e.time} · {e.title}</p>
-                <p className="text-muted-foreground">{e.kind}{e.contactId ? ` · ${personName(db.contacts.find((c) => c.id === e.contactId) || { firstName: "", lastName: "" })}` : ""}</p>
-                <button type="button" className="text-brand" onClick={() => void act({ type: "deleteEvents", ids: [e.id] })}>
-                  Remove
-                </button>
-              </li>
-            ))}
+            {dayEvents.map((e) => {
+              const person = db.contacts.find((c) => c.id === e.contactId);
+              return (
+                <li key={e.id}>
+                  <p className="font-medium">{e.time} · {e.title}</p>
+                  <p className="text-muted-foreground">
+                    {e.kind}
+                    {person ? (
+                      <>
+                        {" · "}
+                        <PersonLink id={person.id} name={personName(person)} />
+                      </>
+                    ) : null}
+                  </p>
+                  {e.notes ? <p className="text-muted-foreground">{e.notes}</p> : null}
+                  <div className="mt-1 flex gap-3">
+                    <button
+                      type="button"
+                      className="text-brand"
+                      onClick={() => {
+                        setEditingId(e.id);
+                        setTitle(e.title);
+                        setDate(e.date);
+                        setTime(e.time);
+                        setKind(e.kind);
+                        setNotes(e.notes);
+                        setContactId(e.contactId);
+                        setOpen(true);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button type="button" className="text-brand" onClick={() => void act({ type: "deleteEvents", ids: [e.id] })}>
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
             {dayTasks.map((t) => (
               <li key={t.id}>
-                <p className="font-medium">Task · {t.title}</p>
+                <p className="font-medium">
+                  <Link href="/tasks" className="hover:underline">Task · {t.title}</Link>
+                </p>
                 {t.contactId ? <PersonLink id={t.contactId} name={personName(db.contacts.find((c) => c.id === t.contactId) || { firstName: "", lastName: "" })} /> : null}
               </li>
             ))}
             {dayTouches.map((t) => (
               <li key={t.key}>
-                <p className="font-medium">Reminder · {t.title}</p>
+                <p className="font-medium">
+                  {t.contactId ? <PersonLink id={t.contactId} name={`Reminder · ${t.title}`} /> : `Reminder · ${t.title}`}
+                </p>
                 <p className="text-muted-foreground">{t.kind}</p>
               </li>
             ))}
@@ -141,20 +183,27 @@ export default function CalendarPage() {
           </ul>
         </aside>
       </div>
-      <p className="mt-3 text-xs text-muted-foreground">Navy dots are appointments. Red dots are tasks. Gold dots are reminders.</p>
+      <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-foreground" /> Appointments</span>
+        <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-brand" /> Tasks</span>
+        <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-amber-700" /> Reminders</span>
+      </p>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add an appointment</DialogTitle>
+            <DialogTitle>{editingId ? "Edit appointment" : "Add an appointment"}</DialogTitle>
           </DialogHeader>
           <form
             className="grid gap-3"
             onSubmit={async (e) => {
               e.preventDefault();
-              const res = await act({ type: "createEvent", title, date, time, kind, notes, contactId });
-              if (toastResult(res, "Appointment added")) {
+              const res = editingId
+                ? await act({ type: "updateEvent", id: editingId, patch: { title, date, time, kind, notes, contactId } })
+                : await act({ type: "createEvent", title, date, time, kind, notes, contactId });
+              if (toastResult(res, editingId ? "Appointment updated" : "Appointment added")) {
                 setOpen(false);
+                setEditingId("");
                 setTitle("");
                 setNotes("");
                 setSelected(date);
@@ -192,7 +241,7 @@ export default function CalendarPage() {
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="bg-card" />
             </Field>
             <DialogFooter>
-              <Button type="submit">Save</Button>
+              <Button type="submit">{editingId ? "Save changes" : "Save"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

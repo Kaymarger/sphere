@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { EmptyState, PageHeader, toastResult, usePageTitle } from "@/components/bits";
 import { useOffice } from "@/components/office-provider";
@@ -19,11 +20,14 @@ const LABELS: { bucket: BinBucket; title: string }[] = [
   { bucket: "listings", title: "Listings" },
   { bucket: "buyers", title: "Buyers" },
   { bucket: "deals", title: "Deals" },
+  { bucket: "enrollments", title: "Plan enrollments" },
 ];
 
 export default function RecyclePage() {
   const { db, act } = useOffice();
   usePageTitle("Recycle bin");
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
+  const [pendingPurge, setPendingPurge] = useState<string | null>(null);
   if (!db) return null;
   const sections = LABELS.map((item) => {
     const rows = (db[item.bucket] as { id: string; deletedAt?: string | null }[]).filter((r) => r.deletedAt);
@@ -35,15 +39,26 @@ export default function RecyclePage() {
     <div>
       <PageHeader eyebrow="Recycle bin" title={total ? `${total} waiting` : "The bin is empty"} lede="Restore something if you deleted it by mistake, or empty the bin when you are sure.">
         {total ? (
-          <Button
-            variant="destructive"
-            onClick={async () => {
-              const res = await act({ type: "emptyBin" });
-              toastResult(res, "Bin emptied");
-            }}
-          >
-            Empty bin
-          </Button>
+          confirmEmpty ? (
+            <div className="flex gap-2">
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  const res = await act({ type: "emptyBin" });
+                  if (toastResult(res, "Bin emptied")) setConfirmEmpty(false);
+                }}
+              >
+                Yes, empty the bin
+              </Button>
+              <Button variant="outline" onClick={() => setConfirmEmpty(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button variant="destructive" onClick={() => setConfirmEmpty(true)}>
+              Empty bin
+            </Button>
+          )
         ) : null}
       </PageHeader>
       {total === 0 ? <EmptyState title="Nothing in the bin" body="Deleted people, tasks, and templates land here first." /> : null}
@@ -61,9 +76,22 @@ export default function RecyclePage() {
                   <Button size="sm" variant="outline" onClick={() => void act({ type: "restore", bucket: section.bucket, ids: [row.id] })}>
                     Restore
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => void act({ type: "purge", bucket: section.bucket, ids: [row.id] })}>
-                    Delete forever
-                  </Button>
+                  {pendingPurge === row.id ? (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={async () => {
+                        const res = await act({ type: "purge", bucket: section.bucket, ids: [row.id] });
+                        if (toastResult(res, "Deleted")) setPendingPurge(null);
+                      }}
+                    >
+                      Delete forever
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="ghost" onClick={() => setPendingPurge(row.id)}>
+                      Delete forever
+                    </Button>
+                  )}
                 </div>
               </li>
             ))}
@@ -92,5 +120,9 @@ function labelFor(db: NonNullable<ReturnType<typeof useOffice>["db"]>, bucket: B
     const c = db.contacts.find((x) => x.id === b?.contactId);
     return c ? personName(c) : "Buyer";
   }
-  return db.deals.find((x) => x.id === id)?.address ?? "Deal";
+  if (bucket === "deals") return db.deals.find((x) => x.id === id)?.address ?? "Deal";
+  const enrollment = db.enrollments.find((x) => x.id === id);
+  const plan = db.plans.find((x) => x.id === enrollment?.planId);
+  const person = db.contacts.find((x) => x.id === enrollment?.contactId);
+  return `${person ? personName(person) : "Someone"} · ${plan?.name ?? "Plan"}`;
 }

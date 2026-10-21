@@ -1,5 +1,5 @@
 import { findDuplicate } from "./csv";
-import { addDays, todayInTimeZone } from "./dates";
+import { addDays, safeTimeZone, todayInTimeZone } from "./dates";
 import { digits } from "./format";
 import { nid } from "./ids";
 import { suggestSalutations } from "./people";
@@ -26,7 +26,7 @@ type Save<T> = Omit<T, "deletedAt" | "id"> & { id?: string };
 
 export type Action =
   | { type: "dismissWelcome" }
-  | { type: "updateSettings"; patch: Partial<Pick<Database["settings"], "userName" | "role" | "phone" | "email" | "timezone" | "showWelcome">> }
+  | { type: "updateSettings"; patch: Partial<Pick<Database["settings"], "userName" | "role" | "phone" | "email" | "timezone" | "showWelcome" | "officeName" | "brokerage" | "city">> }
   | { type: "addAgent"; name: string }
   | { type: "removeAgent"; name: string }
   | { type: "addGroup"; name: string }
@@ -35,11 +35,15 @@ export type Action =
   | { type: "updateContact"; id: string; patch: ContactPatch }
   | { type: "deleteContacts"; ids: string[] }
   | { type: "addNote"; contactId: string; text: string }
+  | { type: "updateNote"; contactId: string; noteId: string; text: string }
+  | { type: "deleteNote"; contactId: string; noteId: string }
   | { type: "addReferral"; contactId: string; name: string; side: Contact["referrals"][number]["side"]; kind: string; status: Contact["referrals"][number]["status"]; notes: string }
+  | { type: "updateReferral"; contactId: string; referralId: string; name: string; side: Contact["referrals"][number]["side"]; kind: string; status: Contact["referrals"][number]["status"]; notes: string }
   | { type: "deleteReferral"; contactId: string; referralId: string }
-  | { type: "addDocument"; contactId: string; name: string; kind: string; note: string }
+  | { type: "addDocument"; contactId: string; name: string; kind: string; note: string; dataUrl?: string; mime?: string }
   | { type: "deleteDocument"; contactId: string; documentId: string }
   | { type: "addProperty"; contactId: string; address: string; city: string; role: Contact["properties"][number]["role"]; date: string; price: number; mls: string }
+  | { type: "updateProperty"; contactId: string; propertyId: string; address: string; city: string; role: Contact["properties"][number]["role"]; date: string; price: number; mls: string }
   | { type: "deleteProperty"; contactId: string; propertyId: string }
   | { type: "createTask"; title: string; due: string; contactId: string; kind: Task["kind"]; notes: string }
   | { type: "updateTask"; id: string; patch: Partial<Pick<Task, "title" | "due" | "done" | "notes" | "kind" | "contactId">> }
@@ -63,6 +67,7 @@ export type Action =
   | { type: "enroll"; planId: string; contactId: string }
   | { type: "advanceEnrollment"; id: string }
   | { type: "setEnrollmentStatus"; id: string; status: "Running" | "Paused" | "Finished" }
+  | { type: "deleteEnrollments"; ids: string[] }
   | { type: "saveListing"; listing: Save<Listing> }
   | { type: "deleteListings"; ids: string[] }
   | { type: "saveBuyer"; buyer: Save<Buyer> }
@@ -245,7 +250,18 @@ export function applyAction(db: Database, action: Action): ApplyResult {
       if (patch.role !== undefined) db.settings.role = patch.role.trim();
       if (patch.phone !== undefined) db.settings.phone = patch.phone.trim();
       if (patch.email !== undefined) db.settings.email = patch.email.trim();
-      if (patch.timezone !== undefined) db.settings.timezone = patch.timezone;
+      if (patch.officeName !== undefined) {
+        const officeName = patch.officeName.trim();
+        if (!officeName) return fail("The office needs a name.");
+        db.settings.officeName = officeName;
+      }
+      if (patch.brokerage !== undefined) db.settings.brokerage = patch.brokerage.trim();
+      if (patch.city !== undefined) db.settings.city = patch.city.trim() || db.settings.city;
+      if (patch.timezone !== undefined) {
+        const zone = patch.timezone.trim();
+        if (safeTimeZone(zone) !== zone) return fail("That time zone isn’t recognized. Pick one from the list.");
+        db.settings.timezone = zone;
+      }
       if (patch.showWelcome !== undefined) db.settings.showWelcome = patch.showWelcome;
       return { db };
     }
@@ -299,6 +315,26 @@ export function applyAction(db: Database, action: Action): ApplyResult {
       logActivity(contact, "Note", text, db.settings.userName);
       return { db };
     }
+    case "updateNote": {
+      const contact = openContact(db, action.contactId);
+      if (!contact) return fail("That person is not in the book.");
+      const note = contact.notes.find((n) => n.id === action.noteId);
+      if (!note) return fail("That note is gone.");
+      const text = action.text.trim();
+      if (!text) return fail("Write a note before saving.");
+      note.text = text;
+      logActivity(contact, "Note", "Updated a note.", db.settings.userName);
+      return { db };
+    }
+    case "deleteNote": {
+      const contact = openContact(db, action.contactId);
+      if (!contact) return fail("That person is not in the book.");
+      const before = contact.notes.length;
+      contact.notes = contact.notes.filter((n) => n.id !== action.noteId);
+      if (contact.notes.length === before) return fail("That note is gone.");
+      logActivity(contact, "Note", "Removed a note.", db.settings.userName);
+      return { db };
+    }
     case "addReferral": {
       const contact = openContact(db, action.contactId);
       if (!contact) return fail("That person is not in the book.");
@@ -315,6 +351,20 @@ export function applyAction(db: Database, action: Action): ApplyResult {
       logActivity(contact, "Referral", `Referral: ${action.name.trim()}`, db.settings.userName);
       return { db };
     }
+    case "updateReferral": {
+      const contact = openContact(db, action.contactId);
+      if (!contact) return fail("That person is not in the book.");
+      const referral = contact.referrals.find((r) => r.id === action.referralId);
+      if (!referral) return fail("That referral is gone.");
+      if (!action.name.trim()) return fail("Who was referred?");
+      referral.name = action.name.trim();
+      referral.side = action.side;
+      referral.kind = action.kind.trim() || "Buyer";
+      referral.status = action.status;
+      referral.notes = action.notes.trim();
+      contact.updatedAt = stamp();
+      return { db };
+    }
     case "deleteReferral": {
       const contact = openContact(db, action.contactId);
       if (!contact) return fail("That person is not in the book.");
@@ -326,12 +376,17 @@ export function applyAction(db: Database, action: Action): ApplyResult {
       const contact = openContact(db, action.contactId);
       if (!contact) return fail("That person is not in the book.");
       if (!action.name.trim()) return fail("Give the file a name.");
+      if (action.dataUrl && action.dataUrl.length > 500_000) {
+        return fail("That file is too big to keep in this browser. Use a file under about 350 KB, or save the name and a note.");
+      }
       contact.documents.unshift({
         id: nid("d"),
         name: action.name.trim(),
         kind: action.kind.trim() || "File",
         at: today,
-        note: action.note.trim() || "Sample file record. Nothing was uploaded.",
+        note: action.note.trim(),
+        dataUrl: action.dataUrl || undefined,
+        mime: action.mime || undefined,
       });
       logActivity(contact, "File", `File noted: ${action.name.trim()}`, db.settings.userName);
       return { db };
@@ -356,6 +411,21 @@ export function applyAction(db: Database, action: Action): ApplyResult {
         mls: action.mls.trim(),
       });
       logActivity(contact, "Property", `${action.role}: ${action.address.trim()}`, db.settings.userName);
+      return { db };
+    }
+    case "updateProperty": {
+      const contact = openContact(db, action.contactId);
+      if (!contact) return fail("That person is not in the book.");
+      const property = contact.properties.find((p) => p.id === action.propertyId);
+      if (!property) return fail("That property is gone.");
+      if (!action.address.trim()) return fail("Add the property address.");
+      property.address = action.address.trim();
+      property.city = action.city.trim() || contact.city;
+      property.role = action.role;
+      property.date = action.date;
+      property.price = Number(action.price) || 0;
+      property.mls = action.mls.trim();
+      contact.updatedAt = stamp();
       return { db };
     }
     case "deleteProperty": {
@@ -408,6 +478,8 @@ export function applyAction(db: Database, action: Action): ApplyResult {
         notes: action.notes.trim(),
       };
       db.events.unshift(event);
+      const contact = action.contactId ? openContact(db, action.contactId) : undefined;
+      if (contact) logActivity(contact, "Appointment", `${event.kind}: ${event.title}`, db.settings.userName);
       return { db, result: { id: event.id } };
     }
     case "updateEvent": {
@@ -609,6 +681,17 @@ export function applyAction(db: Database, action: Action): ApplyResult {
       logActivity(contact, "Plan", `Started the plan: ${plan.name}`, db.settings.userName);
       return { db };
     }
+    case "deleteEnrollments": {
+      for (const id of action.ids) {
+        const enrollment = db.enrollments.find((e) => e.id === id && !e.deletedAt);
+        if (!enrollment) continue;
+        enrollment.deletedAt = stamp();
+        const contact = openContact(db, enrollment.contactId);
+        const plan = db.plans.find((p) => p.id === enrollment.planId);
+        if (contact) logActivity(contact, "Plan", `Left the plan: ${plan?.name ?? "a plan"}`, db.settings.userName);
+      }
+      return { db };
+    }
     case "advanceEnrollment": {
       const enrollment = db.enrollments.find((e) => e.id === action.id && !e.deletedAt);
       if (!enrollment) return fail("That enrollment is gone.");
@@ -749,7 +832,8 @@ export function applyAction(db: Database, action: Action): ApplyResult {
       else if (key === "vendors") db.vendors = db.vendors.filter((r) => !ids.has(r.id));
       else if (key === "listings") db.listings = db.listings.filter((r) => !ids.has(r.id));
       else if (key === "buyers") db.buyers = db.buyers.filter((r) => !ids.has(r.id));
-      else db.deals = db.deals.filter((r) => !ids.has(r.id));
+      else if (key === "deals") db.deals = db.deals.filter((r) => !ids.has(r.id));
+      else db.enrollments = db.enrollments.filter((r) => !ids.has(r.id));
       return { db };
     }
     case "emptyBin": {
@@ -765,6 +849,7 @@ export function applyAction(db: Database, action: Action): ApplyResult {
       db.listings = keep(db.listings);
       db.buyers = keep(db.buyers);
       db.deals = keep(db.deals);
+      db.enrollments = keep(db.enrollments);
       return { db };
     }
     default:

@@ -35,7 +35,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Initials } from "@/components/bits";
 import { useOffice } from "@/components/office-provider";
 import { touchCounts } from "@/lib/keep-in-touch";
-import { contactMatches, personName, primaryEmail, sortPeople } from "@/lib/people";
+import { binCount, contactMatches, personName, primaryEmail, sortPeople } from "@/lib/people";
 
 const GROUPS = [
   {
@@ -96,11 +96,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (!db) return { touch: 0, tasks: 0, bin: 0 };
     const touch = touchCounts(db, today).overdue;
     const tasks = db.tasks.filter((t) => !t.deletedAt && !t.done && t.due <= today).length;
-    const bin =
-      db.contacts.filter((c) => c.deletedAt).length +
-      db.tasks.filter((t) => t.deletedAt).length +
-      db.events.filter((e) => e.deletedAt).length;
-    return { touch, tasks, bin };
+    return { touch, tasks, bin: binCount(db) };
   }, [db, today]);
 
   useEffect(() => {
@@ -330,7 +326,7 @@ function NavLink({
       href={href}
       className={`relative mb-0.5 flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors ${
         collapsed ? "justify-center" : ""
-      } ${on ? "bg-sidebar-accent font-medium text-sidebar-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground"}`}
+      } ${on ? "bg-card font-medium text-sidebar-foreground shadow-sm ring-1 ring-foreground/10" : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground"}`}
     >
       <Icon className="size-4 shrink-0" />
       {collapsed ? null : <span className="flex-1 truncate">{label}</span>}

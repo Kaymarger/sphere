@@ -1,8 +1,18 @@
 export const OFFICE_TZ = "America/Vancouver";
 
+export function safeTimeZone(timeZone?: string): string {
+  const zone = timeZone?.trim() || OFFICE_TZ;
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format();
+    return zone;
+  } catch {
+    return OFFICE_TZ;
+  }
+}
+
 export function todayInTimeZone(timeZone = OFFICE_TZ, now = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
+    timeZone: safeTimeZone(timeZone),
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -165,7 +175,7 @@ export function greetingForHour(name: string, timeZone = OFFICE_TZ, now = new Da
     new Intl.DateTimeFormat("en-CA", {
       hour: "numeric",
       hourCycle: "h23",
-      timeZone,
+      timeZone: safeTimeZone(timeZone),
     }).format(now),
   );
   const part = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";

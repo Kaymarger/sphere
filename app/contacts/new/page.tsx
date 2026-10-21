@@ -19,9 +19,10 @@ export default function NewContactPage() {
   const [mobile, setMobile] = useState("");
   const [city, setCity] = useState("Vancouver");
   const [type, setType] = useState<ContactType>("Client");
-  const [agent, setAgent] = useState(db?.settings.agents[0] ?? "");
+  const [agent, setAgent] = useState("");
   const [busy, setBusy] = useState(false);
   if (!db) return null;
+  const agentValue = agent || db.settings.agents[0] || "";
 
   return (
     <div className="mx-auto max-w-xl">
@@ -37,7 +38,7 @@ export default function NewContactPage() {
           setBusy(true);
           const res = await act({
             type: "createContact",
-            draft: { firstName, lastName, email, mobile, city, type, agent, source: "Office" },
+            draft: { firstName, lastName, email, mobile, city, type, agent: agentValue, source: "Office" },
           });
           setBusy(false);
           if (toastResult(res, "Added to the book") && res.ok && res.result?.id) router.push(`/contacts/${res.result.id}`);
@@ -75,7 +76,7 @@ export default function NewContactPage() {
           </Select>
         </Field>
         <Field label="Agent">
-          <Select value={agent} onValueChange={setAgent}>
+          <Select value={agentValue} onValueChange={setAgent}>
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
