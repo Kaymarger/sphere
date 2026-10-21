@@ -1,0 +1,182 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist), "Geist", "Inter", ui-sans-serif, sans-serif;
+  --font-mono: ui-monospace, monospace;
+  --font-heading: var(--font-geist), "Geist", "Inter", ui-sans-serif, sans-serif;
+  --color-brand: var(--brand);
+  --color-navy: var(--foreground);
+  --color-paper: var(--background);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.2);
+  --radius-2xl: calc(var(--radius) * 1.45);
+  --radius-3xl: calc(var(--radius) * 1.8);
+  --radius-4xl: calc(var(--radius) * 2.2);
+}
+
+:root {
+  color-scheme: light;
+  --background: #f6f6f7;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --secondary: #f0f0f2;
+  --secondary-foreground: #18181b;
+  --muted: #f3f3f5;
+  --muted-foreground: #6d6d78;
+  --accent: #eef0fb;
+  --accent-foreground: #3d4294;
+  --destructive: #be123c;
+  --border: #e6e6ea;
+  --input: #e6e6ea;
+  --ring: #5e6ad2;
+  --brand: #5e6ad2;
+  --chart-1: #5e6ad2;
+  --chart-2: #8b93e6;
+  --chart-3: #b7bced;
+  --chart-4: #d5d8f4;
+  --chart-5: #eceefe;
+  --radius: 0.7rem;
+  --sidebar: #f3f3f5;
+  --sidebar-foreground: #18181b;
+  --sidebar-primary: #5e6ad2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8e8ec;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e6e6ea;
+  --sidebar-ring: #5e6ad2;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #0f0f11;
+  --foreground: #f4f4f5;
+  --card: #17171a;
+  --card-foreground: #f4f4f5;
+  --popover: #1c1c1f;
+  --popover-foreground: #f4f4f5;
+  --primary: #f4f4f5;
+  --primary-foreground: #18181b;
+  --secondary: #232328;
+  --secondary-foreground: #f4f4f5;
+  --muted: #232328;
+  --muted-foreground: #a1a1aa;
+  --accent: #26283a;
+  --accent-foreground: #c7cbf5;
+  --destructive: #fb7185;
+  --border: rgb(255 255 255 / 0.08);
+  --input: rgb(255 255 255 / 0.1);
+  --ring: #8b93e6;
+  --brand: #8b93e6;
+  --chart-1: #8b93e6;
+  --chart-2: #5e6ad2;
+  --chart-3: #3d4294;
+  --chart-4: #2a2d55;
+  --chart-5: #1c1e36;
+  --sidebar: #121214;
+  --sidebar-foreground: #f4f4f5;
+  --sidebar-primary: #8b93e6;
+  --sidebar-primary-foreground: #0f0f11;
+  --sidebar-accent: #232328;
+  --sidebar-accent-foreground: #f4f4f5;
+  --sidebar-border: rgb(255 255 255 / 0.08);
+  --sidebar-ring: #8b93e6;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+  }
+  html {
+    @apply font-sans;
+  }
+  h1, h2, h3, .font-heading {
+    font-family: var(--font-sans);
+    letter-spacing: -0.03em;
+    font-weight: 600;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--brand) 28%, transparent);
+  }
+  [data-slot="input"],
+  [data-slot="select-trigger"],
+  [data-slot="textarea"] {
+    min-height: 2.25rem;
+    background: var(--card);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+  [data-slot="button"][data-size="default"] {
+    min-height: 2.25rem;
+    padding-inline: 0.85rem;
+  }
+  a {
+    transition: color 150ms ease, background-color 150ms ease, box-shadow 180ms ease, border-color 150ms ease;
+  }
+}
+
+/* Soft cards already marked with a hairline ring. */
+.bg-card.ring-1,
+.bg-card.ring-foreground\/10 {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+
+a.rounded-2xl.bg-card:hover,
+a.rounded-xl.bg-card:hover,
+a.rounded-xl:hover {
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.06);
+}
+
+.dark .bg-card.ring-1 {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+  .print-sheet { box-shadow: none !important; border: none !important; }
+}
