@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState, Initials, PageHeader, usePageTitle } from "@/components/bits";
 import { useOffice } from "@/components/office-provider";
+import { contactsToCsv, downloadText } from "@/lib/csv";
+import { DEFAULT_CONTACT_TYPES } from "@/lib/lists";
 import { LETTERS, contactMatches, letterOf, personName, primaryEmail, primaryPhone, sortPeople } from "@/lib/people";
 
 function ContactsInner() {
@@ -22,6 +26,7 @@ function ContactsInner() {
   const agent = params.get("agent") ?? "all";
   const type = params.get("type") ?? "all";
   const page = Math.max(1, Number(params.get("page") ?? "1") || 1);
+  const [selected, setSelected] = useState<string[]>([]);
 
   const setMany = (entries: Record<string, string>, keepPage = false) => {
     const next = new URLSearchParams(params.toString());
@@ -67,8 +72,23 @@ function ContactsInner() {
       <PageHeader
         eyebrow="People"
         title={`${filtered.length} in the book`}
-        lede="Search, jump by letter, or filter by group. Open someone to see the short cards instead of one long form."
+        lede="Search, jump by letter, or filter by group. Export saves this list, or just the people you tick, as a spreadsheet Excel can open."
       >
+        <Button
+          variant="outline"
+          disabled={shown.length === 0 && selected.length === 0}
+          onClick={() => {
+            const chosen = selected.length ? db.contacts.filter((c) => !c.deletedAt && selected.includes(c.id)) : shown;
+            if (!chosen.length) {
+              toast.error("Nobody to export.");
+              return;
+            }
+            downloadText("sphere-people.csv", contactsToCsv(chosen));
+            toast.success(selected.length ? `Exported ${chosen.length} selected people` : `Exported ${chosen.length} people from this list`);
+          }}
+        >
+          {selected.length ? `Export ${selected.length} selected` : `Export ${shown.length}`}
+        </Button>
         <Button asChild>
           <Link href="/contacts/new">Add a person</Link>
         </Button>
@@ -103,10 +123,7 @@ function ContactsInner() {
           onChange={(v) => set("type", v)}
           options={[
             ["all", "All types"],
-            ["Client", "Client"],
-            ["Prospect", "Prospect"],
-            ["Personal", "Personal"],
-            ["B2B", "B2B"],
+            ...(db.settings.contactTypes?.length ? db.settings.contactTypes : DEFAULT_CONTACT_TYPES).map((item) => [item, item] as [string, string]),
           ]}
         />
       </div>
@@ -123,17 +140,40 @@ function ContactsInner() {
           ))}
         </div>
         <div>
-          <p className="mb-2 text-sm text-muted-foreground">
-            Showing {slice.length} of {shown.length}
-            {letter !== "All" ? ` under ${letter}` : ""}
-          </p>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+            <p>
+              Showing {slice.length} of {shown.length}
+              {letter !== "All" ? ` under ${letter}` : ""}
+            </p>
+            {shown.length ? (
+              <label className="flex items-center gap-2">
+                <Checkbox
+                  checked={shown.length > 0 && shown.every((c) => selected.includes(c.id))}
+                  onCheckedChange={(v) => {
+                    if (v === true) setSelected([...new Set([...selected, ...shown.map((c) => c.id)])]);
+                    else setSelected(selected.filter((id) => !shown.some((c) => c.id === id)));
+                  }}
+                  aria-label="Select everyone in this list"
+                />
+                Select this list
+              </label>
+            ) : null}
+          </div>
           {slice.length === 0 ? (
             <EmptyState title="No one matches" body="Try a last name, a phone number, or a group like Buyer." />
           ) : (
             <ul className="overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/10">
               {slice.map((c) => (
                 <li key={c.id} className="border-b last:border-b-0">
-                  <Link href={`/contacts/${c.id}`} className="grid gap-1 px-4 py-3 transition-colors hover:bg-muted/70 md:grid-cols-[1.4fr_0.9fr_1.1fr_0.7fr] md:items-center">
+                  <div className="flex items-stretch">
+                    <div className="grid place-items-center px-3">
+                      <Checkbox
+                        checked={selected.includes(c.id)}
+                        onCheckedChange={(v) => setSelected(v === true ? [...selected, c.id] : selected.filter((id) => id !== c.id))}
+                        aria-label={`Select ${personName(c)}`}
+                      />
+                    </div>
+                  <Link href={`/contacts/${c.id}`} className="grid min-w-0 flex-1 gap-1 px-4 py-3 transition-colors hover:bg-muted/70 md:grid-cols-[1.4fr_0.9fr_1.1fr_0.7fr] md:items-center">
                     <div className="flex items-start gap-3">
                       <Initials name={personName(c)} />
                       <div>
@@ -155,6 +195,7 @@ function ContactsInner() {
                     <p className="truncate text-sm text-muted-foreground">{primaryEmail(c) || "No email"}</p>
                     <p className="text-sm">{c.city}</p>
                   </Link>
+                  </div>
                 </li>
               ))}
             </ul>

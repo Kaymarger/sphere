@@ -1,4 +1,5 @@
-export type ContactType = "Client" | "Prospect" | "Personal" | "B2B";
+/** A label such as Past Client. The office can add more. */
+export type ContactType = string;
 
 export type MailPreference = "Email" | "Mail" | "Both" | "Do not market";
 
@@ -275,6 +276,8 @@ export interface OfficeSettings {
   seededOn: string;
   agents: string[];
   groups: string[];
+  sources: string[];
+  contactTypes: string[];
 }
 
 export interface Database {

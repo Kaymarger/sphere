@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, Field, Initials, toastResult, usePageTitle, useSyncedDraft } from "@/components/bits";
+import { CreatableMultiSelect, CreatableSelect } from "@/components/creatable-select";
 import { useOffice } from "@/components/office-provider";
 import { downloadText } from "@/lib/csv";
 import { longDate, shortDate } from "@/lib/dates";
@@ -129,7 +130,14 @@ export function ContactProfile({ id }: { id: string }) {
           <NamesCard contact={contact} onSave={save} />
           <PhonesCard contact={contact} onSave={save} />
           <EmailsCard contact={contact} onSave={save} />
-          <AboutCard contact={contact} groups={db.settings.groups} agents={db.settings.agents} onSave={save} />
+          <AboutCard
+            contact={contact}
+            groups={db.settings.groups ?? []}
+            agents={db.settings.agents ?? []}
+            sources={db.settings.sources ?? []}
+            contactTypes={db.settings.contactTypes ?? []}
+            onSave={save}
+          />
           <article className="rounded-2xl bg-card p-4 ring-1 ring-foreground/10 lg:col-span-2">
             <h2 className="font-heading text-xl text-foreground">At a glance</h2>
             <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
@@ -374,88 +382,73 @@ function AboutCard({
   contact,
   groups,
   agents,
+  sources,
+  contactTypes,
   onSave,
 }: {
   contact: Contact;
   groups: string[];
   agents: string[];
+  sources: string[];
+  contactTypes: string[];
   onSave: (p: ContactPatch) => Promise<void>;
 }) {
+  const { act } = useOffice();
   const { draft, setDraft, dirty } = useSyncedDraft({
     type: contact.type,
     source: contact.source,
     agent: contact.agent,
     tags: contact.tags,
   });
-  const [group, setGroup] = useState("");
   return (
     <CardShell title="Type, source, and groups" dirty={dirty} onSave={() => onSave(draft)}>
-      <Field label="Contact type">
-        <Select value={draft.type} onValueChange={(type) => setDraft({ ...draft, type: type as Contact["type"] })}>
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {["Client", "Prospect", "Personal", "B2B"].map((item) => (
-              <SelectItem key={item} value={item}>
-                {item}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field label="Original source">
-        <Input value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value })} />
-      </Field>
-      <Field label="Agent">
-        <Select value={draft.agent || agents[0]} onValueChange={(agent) => setDraft({ ...draft, agent })}>
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {agents.map((item) => (
-              <SelectItem key={item} value={item}>
-                {item}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <div className="flex flex-wrap gap-1">
-        {draft.tags.map((tag) => (
-          <button key={tag} type="button" className="rounded-full bg-secondary px-2 py-1 text-xs" onClick={() => setDraft({ ...draft, tags: draft.tags.filter((t) => t !== tag) })}>
-            {tag} ×
-          </button>
-        ))}
-      </div>
-      <div className="flex gap-2">
-        <Input
-          list="group-list"
-          value={group}
-          onChange={(e) => setGroup(e.target.value)}
-          placeholder="Add a group"
-          aria-label="Add a group"
-        />
-        <datalist id="group-list">
-          {groups.map((g) => (
-            <option key={g} value={g} />
-          ))}
-        </datalist>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            const next = group.trim();
-            if (!next || draft.tags.includes(next)) return;
-            setDraft({ ...draft, tags: [...draft.tags, next] });
-            setGroup("");
-          }}
-        >
-          Add
-        </Button>
-      </div>
+      <CreatableSelect
+        label="Contact type"
+        value={draft.type}
+        options={withCurrent(contactTypes, draft.type)}
+        onChange={(type) => setDraft({ ...draft, type })}
+        emptyLabel="No type"
+        onCreate={async (name) => {
+          await act({ type: "addContactType", name });
+        }}
+      />
+      <CreatableSelect
+        label="Original source"
+        value={draft.source}
+        options={withCurrent(sources, draft.source)}
+        onChange={(source) => setDraft({ ...draft, source })}
+        emptyLabel="No source"
+        onCreate={async (name) => {
+          await act({ type: "addSource", name });
+        }}
+      />
+      <CreatableSelect
+        label="Agent"
+        value={draft.agent}
+        options={withCurrent(agents, draft.agent)}
+        onChange={(agent) => setDraft({ ...draft, agent })}
+        emptyLabel="No agent"
+        onCreate={async (name) => {
+          await act({ type: "addAgent", name });
+        }}
+      />
+      <CreatableMultiSelect
+        label="Tags"
+        values={draft.tags}
+        options={groups}
+        onChange={(tags) => setDraft({ ...draft, tags })}
+        onCreate={async (name) => {
+          await act({ type: "addGroup", name });
+        }}
+      />
+      <p className="text-xs text-muted-foreground">A new type, source, agent, or tag is saved to Settings as soon as you add it. Save stores it on this person.</p>
     </CardShell>
   );
+}
+
+function withCurrent(options: string[], current: string) {
+  if (!current || options.some((option) => option.toLowerCase() === current.toLowerCase())) return options;
+  return [current, ...options];
 }
 
 function HomeCard({ contact, onSave }: { contact: Contact; onSave: (p: ContactPatch) => Promise<void> }) {

@@ -29,7 +29,7 @@ export function people(db: Database): Contact[] {
 }
 
 export function personName(c: Pick<Contact, "firstName" | "lastName">): string {
-  return `${c.firstName} ${c.lastName}`.trim();
+  return `${c.firstName} ${c.lastName}`.trim() || "Unnamed";
 }
 
 export function householdLabel(c: Contact): string {

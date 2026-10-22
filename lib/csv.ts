@@ -125,13 +125,15 @@ function yes(value: string): boolean {
 }
 
 function mapType(value: string): ContactType | undefined {
-  const v = value.trim().toLowerCase();
+  const raw = value.trim();
+  const v = raw.toLowerCase();
   if (!v) return undefined;
+  if (v.includes("past client") || v.includes("past-client")) return "Past Client";
   if (v.includes("prospect") || v.includes("lead")) return "Prospect";
   if (v.includes("personal") || v.includes("friend") || v.includes("family")) return "Personal";
   if (v.includes("b2b") || v.includes("business") || v.includes("vendor")) return "B2B";
-  if (v.includes("client")) return "Client";
-  return undefined;
+  if (v === "client" || v.includes("client")) return "Client";
+  return raw;
 }
 
 function mapMail(value: string): MailPreference | undefined {
@@ -311,27 +313,51 @@ const EXPORT_HEADERS = [
   "Contact Type",
   "Original Source of Contact",
   "Categories",
+  "Tags",
   "Assigned Agent",
   "Company",
   "Job Title",
   "Do Not Send Mass Emails",
   "Mail Preference",
   "Notes",
+  "Casual name",
+  "Envelope line",
+  "Letter greeting",
+  "Work street",
+  "Work city",
+  "Work phone",
+  "Other phones",
+  "Other emails",
+  "Children",
+  "Pets",
+  "Interests",
+  "Referrals",
+  "Properties",
+  "Files",
+  "Created",
+  "Updated",
 ];
 
 function cell(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
+  let text = value ?? "";
+  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function joinBits(parts: string[]): string {
+  return parts.map((part) => part.trim()).filter(Boolean).join("; ");
 }
 
 export function contactsToCsv(contacts: Contact[]): string {
-  const lines = [EXPORT_HEADERS.join(",")];
+  const lines = [EXPORT_HEADERS.map(cell).join(",")];
   for (const c of contacts) {
     if (c.deletedAt) continue;
     const home = c.phones.find((p) => p.label.toLowerCase().includes("home"));
-    const mobile = c.phones.find((p) => p !== home) ?? c.phones[0];
+    const mobile = c.phones.find((p) => !home || p !== home) ?? c.phones[0];
+    const usedPhones = new Set([mobile, home].filter(Boolean));
     const email = c.emails[0]?.address ?? "";
     const spouseEmail = c.emails.find((e) => e.label.toLowerCase().includes("spouse"))?.address ?? "";
+    const tags = joinBits(c.tags);
     const notes = c.notes.map((n) => n.text).join(" | ");
     const values = [
       c.firstName,
@@ -352,17 +378,34 @@ export function contactsToCsv(contacts: Contact[]): string {
       c.moveInDate,
       c.type,
       c.source,
-      c.tags.join("|"),
+      tags,
+      tags,
       c.agent,
       c.company,
       c.jobTitle,
       c.acceptMassEmail ? "No" : "Yes",
       c.mailPreference,
       notes,
+      c.salutation,
+      c.envelopeLine,
+      c.letterGreeting,
+      c.workStreet,
+      c.workCity,
+      c.workPhone,
+      joinBits(c.phones.filter((p) => !usedPhones.has(p)).map((p) => `${p.label}: ${p.number}`)),
+      joinBits(c.emails.filter((e) => e.address !== email && e.address !== spouseEmail).map((e) => `${e.label}: ${e.address}`)),
+      joinBits(c.children.map((child) => (child.birthday ? `${child.name} (${child.birthday})` : child.name))),
+      joinBits(c.pets.map((pet) => (pet.kind ? `${pet.name} (${pet.kind})` : pet.name))),
+      joinBits(c.interests),
+      joinBits(c.referrals.map((r) => `${r.name} (${r.side}, ${r.status})`)),
+      joinBits(c.properties.map((p) => `${p.role}: ${p.address}, ${p.city}`)),
+      joinBits(c.documents.map((d) => d.name)),
+      c.createdAt,
+      c.updatedAt,
     ];
     lines.push(values.map((v) => cell(v ?? "")).join(","));
   }
-  return lines.join("\n");
+  return `\uFEFF${lines.join("\r\n")}`;
 }
 
 export function downloadText(filename: string, text: string, mime = "text/csv;charset=utf-8") {

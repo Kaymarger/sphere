@@ -31,6 +31,10 @@ export type Action =
   | { type: "removeAgent"; name: string }
   | { type: "addGroup"; name: string }
   | { type: "removeGroup"; name: string }
+  | { type: "addSource"; name: string }
+  | { type: "removeSource"; name: string }
+  | { type: "addContactType"; name: string }
+  | { type: "removeContactType"; name: string }
   | { type: "createContact"; draft: ContactDraft }
   | { type: "updateContact"; id: string; patch: ContactPatch }
   | { type: "deleteContacts"; ids: string[] }
@@ -95,16 +99,28 @@ function openContact(db: Database, id: string) {
   return db.contacts.find((c) => c.id === id && !c.deletedAt);
 }
 
+function rememberIn(list: string[] | undefined, value: string): string[] {
+  const next = list ?? [];
+  const clean = value.trim();
+  if (clean && !next.includes(clean)) next.push(clean);
+  return next;
+}
+
 function rememberGroups(db: Database, tags: string[]) {
-  for (const tag of tags) {
-    const clean = tag.trim();
-    if (clean && !db.settings.groups.includes(clean)) db.settings.groups.push(clean);
-  }
+  db.settings.groups = db.settings.groups ?? [];
+  for (const tag of tags) db.settings.groups = rememberIn(db.settings.groups, tag);
 }
 
 function rememberAgent(db: Database, agent: string) {
-  const clean = agent.trim();
-  if (clean && !db.settings.agents.includes(clean)) db.settings.agents.push(clean);
+  db.settings.agents = rememberIn(db.settings.agents, agent);
+}
+
+function rememberSource(db: Database, source: string) {
+  db.settings.sources = rememberIn(db.settings.sources, source);
+}
+
+function rememberType(db: Database, type: string) {
+  db.settings.contactTypes = rememberIn(db.settings.contactTypes, type);
 }
 
 function logActivity(contact: Contact, kind: string, summary: string, by: string) {
@@ -113,8 +129,8 @@ function logActivity(contact: Contact, kind: string, summary: string, by: string
 }
 
 export function contactFromDraft(db: Database, draft: ContactDraft, how: string): Contact {
-  const firstName = draft.firstName.trim();
-  const lastName = draft.lastName.trim();
+  const firstName = (draft.firstName ?? "").trim();
+  const lastName = (draft.lastName ?? "").trim();
   const spouseFirst = (draft.spouseFirst ?? "").trim();
   const spouseLast = (draft.spouseLast ?? "").trim();
   const greet = suggestSalutations({ firstName, lastName, spouseFirst, spouseLast });
@@ -126,8 +142,12 @@ export function contactFromDraft(db: Database, draft: ContactDraft, how: string)
   if (draft.spouseEmail?.trim()) emails.push({ id: nid("e"), label: "Spouse", address: draft.spouseEmail.trim() });
   const tags = (draft.tags ?? []).map((t) => t.trim()).filter(Boolean);
   rememberGroups(db, tags);
-  const agent = (draft.agent ?? "").trim() || db.settings.agents[0] || "";
+  const agent = (draft.agent ?? "").trim();
   rememberAgent(db, agent);
+  const source = (draft.source ?? "").trim();
+  rememberSource(db, source);
+  const type = (draft.type ?? "").trim();
+  rememberType(db, type);
   const contact: Contact = {
     id: nid("c"),
     firstName,
@@ -142,8 +162,8 @@ export function contactFromDraft(db: Database, draft: ContactDraft, how: string)
     envelopeLine: greet.envelopeLine,
     letterGreeting: greet.letterGreeting,
     street: (draft.street ?? "").trim(),
-    city: (draft.city ?? "").trim() || "Vancouver",
-    province: (draft.province ?? "").trim() || "BC",
+    city: (draft.city ?? "").trim() || (how === "Import" ? "Vancouver" : ""),
+    province: (draft.province ?? "").trim() || (how === "Import" ? "BC" : ""),
     postal: (draft.postal ?? "").trim(),
     moveInDate: draft.moveInDate ?? "",
     company: (draft.company ?? "").trim(),
@@ -151,8 +171,8 @@ export function contactFromDraft(db: Database, draft: ContactDraft, how: string)
     workStreet: "",
     workCity: "",
     workPhone: "",
-    type: draft.type ?? "Client",
-    source: (draft.source ?? "").trim() || how,
+    type,
+    source,
     birthday: draft.birthday ?? "",
     spouseBirthday: draft.spouseBirthday ?? "",
     anniversary: draft.anniversary ?? "",
@@ -284,10 +304,25 @@ export function applyAction(db: Database, action: Action): ApplyResult {
       db.settings.groups = db.settings.groups.filter((g) => g !== action.name);
       for (const c of db.contacts) c.tags = c.tags.filter((t) => t !== action.name);
       return { db };
+    case "addSource": {
+      const name = action.name.trim();
+      if (!name) return fail("Type a source first.");
+      rememberSource(db, name);
+      return { db };
+    }
+    case "removeSource":
+      db.settings.sources = (db.settings.sources ?? []).filter((s) => s !== action.name);
+      return { db };
+    case "addContactType": {
+      const name = action.name.trim();
+      if (!name) return fail("Type a contact type first.");
+      rememberType(db, name);
+      return { db };
+    }
+    case "removeContactType":
+      db.settings.contactTypes = (db.settings.contactTypes ?? []).filter((t) => t !== action.name);
+      return { db };
     case "createContact": {
-      if (!action.draft.firstName?.trim() || !action.draft.lastName?.trim()) {
-        return fail("A person needs a first name and a last name.");
-      }
       const contact = contactFromDraft(db, action.draft, "Office");
       db.contacts.unshift(contact);
       return { db, result: { id: contact.id } };
@@ -295,11 +330,11 @@ export function applyAction(db: Database, action: Action): ApplyResult {
     case "updateContact": {
       const contact = openContact(db, action.id);
       if (!contact) return fail("That person is not in the book.");
-      if (action.patch.firstName !== undefined && !action.patch.firstName.trim()) return fail("First name can’t be empty.");
-      if (action.patch.lastName !== undefined && !action.patch.lastName.trim()) return fail("Last name can’t be empty.");
       Object.assign(contact, action.patch);
       if (action.patch.tags) rememberGroups(db, contact.tags);
       if (action.patch.agent) rememberAgent(db, contact.agent);
+      if (action.patch.source) rememberSource(db, contact.source);
+      if (action.patch.type) rememberType(db, contact.type);
       contact.updatedAt = stamp();
       return { db };
     }

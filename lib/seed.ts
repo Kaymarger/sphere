@@ -1,4 +1,5 @@
 import { addDays, todayInTimeZone } from "./dates";
+import { DEFAULT_CONTACT_TYPES, DEFAULT_SOURCES } from "./lists";
 import { suggestSalutations } from "./people";
 import type {
   ActivityPlan,
@@ -94,18 +95,7 @@ const GROUPS = [
   "Landlord",
 ];
 
-const SOURCES = [
-  "Referral",
-  "Past client",
-  "Open house",
-  "Sign call",
-  "Website",
-  "Social media",
-  "Farm area",
-  "Relocation",
-  "Floor time",
-  "Friend of the office",
-];
+const SOURCES = DEFAULT_SOURCES;
 
 const INTERESTS = [
   "Seawall walks",
@@ -1151,6 +1141,8 @@ export function seedDatabase(now = new Date()): Database {
       seededOn: today,
       agents: [...AGENTS],
       groups: [...GROUPS],
+      sources: [...DEFAULT_SOURCES],
+      contactTypes: [...DEFAULT_CONTACT_TYPES],
     },
     contacts,
     tasks,

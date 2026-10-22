@@ -150,6 +150,24 @@ export default function SettingsPage() {
           <Button type="submit" variant="outline">Add</Button>
         </form>
       </article>
+      <NameList
+        title="Sources"
+        hint="People already using a source keep it if you remove the name here."
+        items={db.settings.sources ?? []}
+        placeholder="New source"
+        addLabel="New source"
+        onAdd={(name) => act({ type: "addSource", name })}
+        onRemove={(name) => act({ type: "removeSource", name })}
+      />
+      <NameList
+        title="Contact types"
+        hint="Past Client stays available for new people. Removing a type here does not change people who already have it."
+        items={db.settings.contactTypes ?? []}
+        placeholder="New contact type"
+        addLabel="New contact type"
+        onAdd={(name) => act({ type: "addContactType", name })}
+        onRemove={(name) => act({ type: "removeContactType", name })}
+      />
       <article className="rounded-2xl border border-dashed p-5">
         <h2 className="font-heading text-2xl text-foreground">Put the sample office back</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -178,5 +196,51 @@ export default function SettingsPage() {
         )}
       </article>
     </div>
+  );
+}
+
+function NameList({
+  title,
+  hint,
+  items,
+  placeholder,
+  addLabel,
+  onAdd,
+  onRemove,
+}: {
+  title: string;
+  hint: string;
+  items: string[];
+  placeholder: string;
+  addLabel: string;
+  onAdd: (name: string) => Promise<{ ok: boolean; error?: string }>;
+  onRemove: (name: string) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [name, setName] = useState("");
+  return (
+    <article className="rounded-2xl bg-card p-5 ring-1 ring-foreground/10">
+      <h2 className="font-heading text-2xl text-foreground">{title}</h2>
+      <ul className="mt-2 flex flex-wrap gap-2">
+        {items.map((item) => (
+          <li key={item}>
+            <button type="button" className="rounded-full bg-secondary px-3 py-1 text-sm" onClick={() => void onRemove(item)}>
+              {item} ×
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
+      <form
+        className="mt-3 flex gap-2"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const res = await onAdd(name);
+          if (toastResult(res, `${title.slice(0, -1)} added`)) setName("");
+        }}
+      >
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={placeholder} aria-label={addLabel} />
+        <Button type="submit" variant="outline">Add</Button>
+      </form>
+    </article>
   );
 }
